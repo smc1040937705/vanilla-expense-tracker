@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试 - 个人收支记账</title>
+    <style>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #f5f7fa;
+}
+h1 {
+    color: #1d90f5;
+}
+.test-suite {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.test-suite h2 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 2px solid #1d90f5;
+    padding-bottom: 10px;
+}
+.test-case {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+    border-left: 4px solid #ccc;
+}
+.test-case.pass {
+    background: #e8f5e9;
+    border-left-color: #4caf50;
+}
+.test-case.fail {
+    background: #ffebee;
+    border-left-color: #f44336;
+}
+.test-name {
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+.test-result {
+    font-size: 14px;
+    color: #666;
+}
+.summary {
+    background: #1d90f5;
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 18px;
+}
+.summary.fail {
+    background: #f44336;
+}
+.summary.pass {
+    background: #4caf50;
+}
+    </style>
+</head>
+<body>
+    <h1>个人收支记账 - 单元测试</h1>
+    <div id="test-results"></div>
+    <div id="summary" class="summary"></div>
+    
+    <script>
+(function() {
+    'use strict';
+    
+    function yuanToFen(yuan) {
+        return Math.round(yuan * 100);
+    }
+    
+    function fenToYuan(fen) {
+        return fen / 100;
+    }
+    
+    function formatMoney(fen, showSign) {
+        var yuan = fenToYuan(fen);
+        var formatted = Math.abs(yuan).toFixed(2);
+        if (showSign && fen !== 0) {
+            return fen > 0 ? '+' + formatted : '-' + formatted;
+        }
+        return formatted;
+    }
+    
+    function addFen(a, b) {
+        return a + b;
+    }
+    
+    function subtractFen(a, b) {
+        return a - b;
+    }
+    
+    function filterRecords(records, filters) {
+        var result = records.slice();
+        
+        if (filters.type && filters.type !== 'all') {
+            result = result.filter(function(r) { return r.type === filters.type; });
+        }
+        
+        if (filters.category && filters.category !== 'all') {
+            result = result.filter(function(r) { return r.category === filters.category; });
+        }
+        
+        if (filters.startDate) {
+            result = result.filter(function(r) { return r.date >= filters.startDate; });
+        }
+        
+        if (filters.endDate) {
+            result = result.filter(function(r) { return r.date <= filters.endDate; });
+        }
+        
+        result.sort(function(a, b) {
+            var dateCompare = b.date.localeCompare(a.date);
+            if (dateCompare !== 0) return dateCompare;
+            return b.createdAt.localeCompare(a.createdAt);
+        });
+        
+        return result;
+    }
+    
+    function calculateStats(records) {
+        var totalIncome = 0;
+        var totalExpense = 0;
+        
+        for (var i = 0; i < records.length; i++) {
+            var record = records[i];
+            if (record.type === 'income') {
+                totalIncome += record.amount;
+            } else {
+                totalExpense += record.amount;
+            }
+        }
+        
+        return {
+            totalIncome: totalIncome,
+            totalExpense: totalExpense,
+            balance: totalIncome - totalExpense
+        };
+    }
+    
+    function aggregateByDate(records, days) {
+        var dateMap = {};
+        
+        for (var i = 0; i < days.length; i++) {
+            dateMap[days[i].date] = { income: 0, expense: 0 };
+        }
+        
+        for (var j = 0; j < records.length; j++) {
+            var record = records[j];
+            var data = dateMap[record.date];
+            if (data) {
+                if (record.type === 'income') {
+                    data.income += record.amount;
+                } else {
+                    data.expense += record.amount;
+                }
+            }
+        }
+        
+        return days.map(function(day) {
+            var d = dateMap[day.date];
+            return {
+                date: day.date,
+                label: day.label,
+                income: d.income,
+                expense: d.expense
+            };
+        });
+    }
+    
+    function validateAmount(value) {
+        if (value === '' || value === null || value === undefined) {
+            return { isValid: false, error: '请输入金额' };
+        }
+        
+        var num = parseFloat(value);
+        if (isNaN(num)) {
+            return { isValid: false, error: '请输入有效的数字' };
+        }
+        
+        if (num <= 0) {
+            return { isValid: false, error: '金额必须大于0' };
+        }
+        
+        if (num > 999999999) {
+            return { isValid: false, error: '金额超出范围' };
+        }
+        
+        return { isValid: true, error: null };
+    }
+    
+    function validateDate(value) {
+        if (!value) {
+            return { isValid: false, error: '请选择日期' };
+        }
+        
+        var date = new Date(value);
+        if (isNaN(date.getTime())) {
+            return { isValid: false, error: '日期格式无效' };
+        }
+        
+        var today = new Date();
+        today.setHours(23, 59, 59, 999);
+        
+        if (date > today) {
+            return { isValid: false, error: '日期不能超过今天' };
+        }
+        
+        return { isValid: true, error: null };
+    }
+    
+    function validateCategory(value) {
+        if (!value || value.trim() === '') {
+            return { isValid: false, error: '请选择分类' };
+        }
+        return { isValid: true, error: null };
+    }
+    
+    function validateRecord(data) {
+        var errors = {};
+        
+        if (!data.amount || data.amount <= 0) {
+            errors.amount = '请输入有效的金额';
+        }
+        
+        if (!data.category || data.category.trim() === '') {
+            errors.category = '请选择分类';
+        }
+        
+        if (!data.date) {
+            errors.date = '请选择日期';
+        }
+        
+        if (!data.type || ['income', 'expense'].indexOf(data.type) === -1) {
+            errors.type = '请选择类型';
+        }
+        
+        return {
+            isValid: Object.keys(errors).length === 0,
+            errors: errors
+        };
+    }
+    
+    var results = {
+        passed: 0,
+        failed: 0,
+        suites: []
+    };
+    
+    function test(name, fn) {
+        try {
+            var result = fn();
+            if (result === true || result.pass === true) {
+                return { name: name, pass: true, detail: result.detail || '通过' };
+            } else {
+                return { name: name, pass: false, detail: result.detail || result || '失败' };
+            }
+        } catch (e) {
+            return { name: name, pass: false, detail: '异常: ' + e.message };
+        }
+    }
+    
+    function runSuite(name, tests) {
+        var suiteResults = tests.map(function(t) {
+            return test(t.name, t.fn);
+        });
+        var passed = suiteResults.filter(function(r) { return r.pass; }).length;
+        var failed = suiteResults.filter(function(r) { return !r.pass; }).length;
+        
+        results.passed += passed;
+        results.failed += failed;
+        results.suites.push({ name: name, tests: suiteResults, passed: passed, failed: failed });
+    }
+    
+    function assertEqual(actual, expected, message) {
+        if (actual === expected) {
+            return { pass: true, detail: message || '值相等: ' + actual };
+        }
+        return { pass: false, detail: (message || '') + ' 期望: ' + expected + ', 实际: ' + actual };
+    }
+    
+    function assertDeepEqual(actual, expected, message) {
+        if (JSON.stringify(actual) === JSON.stringify(expected)) {
+            return { pass: true, detail: message || '对象相等' };
+        }
+        return { pass: false, detail: (message || '') + ' 期望: ' + JSON.stringify(expected) + ', 实际: ' + JSON.stringify(actual) };
+    }
+    
+    function assertTrue(value, message) {
+        return { pass: value === true, detail: message || '期望 true, 实际 ' + value };
+    }
+    
+    function assertFalse(value, message) {
+        return { pass: value === false, detail: message || '期望 false, 实际 ' + value };
+    }
+    
+    runSuite('金额计算精度验证', [
+        {
+            name: '元转分 - 整数金额',
+            fn: function() { return assertEqual(yuanToFen(100), 10000, '100元 = 10000分'); }
+        },
+        {
+            name: '元转分 - 小数金额',
+            fn: function() { return assertEqual(yuanToFen(1.23), 123, '1.23元 = 123分'); }
+        },
+        {
+            name: '元转分 - 精度测试 0.1 + 0.2',
+            fn: function() { return assertEqual(yuanToFen(0.1 + 0.2), 30, '0.1+0.2元 = 30分'); }
+        },
+        {
+            name: '元转分 - 精度测试 0.07',
+            fn: function() { return assertEqual(yuanToFen(0.07), 7, '0.07元 = 7分'); }
+        },
+        {
+            name: '分转元 - 整数分',
+            fn: function() { return assertEqual(fenToYuan(10000), 100, '10000分 = 100元'); }
+        },
+        {
+            name: '分转元 - 小数结果',
+            fn: function() { return assertEqual(fenToYuan(123), 1.23, '123分 = 1.23元'); }
+        },
+        {
+            name: '格式化金额 - 正数',
+            fn: function() { return assertEqual(formatMoney(12345), '123.45', '12345分格式化为 123.45'); }
+        },
+        {
+            name: '格式化金额 - 带符号',
+            fn: function() { return assertEqual(formatMoney(12345, true), '+123.45', '带符号格式化'); }
+        },
+        {
+            name: '格式化金额 - 负数带符号',
+            fn: function() { return assertEqual(formatMoney(-12345, true), '-123.45', '负数带符号格式化'); }
+        },
+        {
+            name: '金额加法 - 无精度损失',
+            fn: function() { return assertEqual(addFen(1, 2), 3, '1分 + 2分 = 3分'); }
+        },
+        {
+            name: '金额加法 - 大数',
+            fn: function() { return assertEqual(addFen(100000, 200000), 300000, '大数加法'); }
+        },
+        {
+            name: '金额减法 - 无精度损失',
+            fn: function() { return assertEqual(subtractFen(100, 30), 70, '100分 - 30分 = 70分'); }
+        }
+    ]);
+    
+    var mockRecords = [
+        { id: '1', type: 'income', amount: 10000, category: '工资', date: '2024-01-15', note: '月薪' },
+        { id: '2', type: 'expense', amount: 3000, category: '餐饮', date: '2024-01-16', note: '聚餐' },
+        { id: '3', type: 'expense', amount: 5000, category: '购物', date: '2024-01-17', note: '买衣服' },
+        { id: '4', type: 'income', amount: 2000, category: '奖金', date: '2024-01-18', note: '年终奖' },
+        { id: '5', type: 'expense', amount: 1000, category: '餐饮', date: '2024-01-19', note: '外卖' },
+        { id: '6', type: 'expense', amount: 2000, category: '交通', date: '2024-01-20', note: '打车' }
+    ];
+    
+    runSuite('筛选逻辑正确性', [
+        {
+            name: '筛选 - 按类型筛选收入',
+            fn: function() {
+                var filtered = filterRecords(mockRecords, { type: 'income' });
+                return assertEqual(filtered.length, 2, '筛选收入记录');
+            }
+        },
+        {
+            name: '筛选 - 按类型筛选支出',
+            fn: function() {
+                var filtered = filterRecords(mockRecords, { type: 'expense' });
+                return assertEqual(filtered.length, 4, '筛选支出记录');
+            }
+        },
+        {
+            name: '筛选 - 按分类筛选',
+            fn: function() {
+                var filtered = filterRecords(mockRecords, { category: '餐饮' });
+                return assertEqual(filtered.length, 2, '筛选餐饮记录');
+            }
+        },
+        {
+            name: '筛选 - 按日期范围筛选',
+            fn: function() {
+                var filtered = filterRecords(mockRecords, { startDate: '2024-01-16', endDate: '2024-01-18' });
+                return assertEqual(filtered.length, 3, '日期范围筛选');
+            }
+        },
+        {
+            name: '筛选 - 组合条件筛选',
+            fn: function() {
+                var filtered = filterRecords(mockRecords, { type: 'expense', category: '餐饮' });
+                return assertEqual(filtered.length, 2, '类型+分类组合筛选');
+            }
+        },
+        {
+            name: '筛选 - 结果按日期降序排列',
+            fn: function() {
+                var filtered = filterRecords(mockRecords, {});
+                var dates = filtered.map(function(r) { return r.date; });
+                var sorted = dates.slice().sort(function(a, b) { return b.localeCompare(a); });
+                return assertDeepEqual(dates, sorted, '日期降序');
+            }
+        },
+        {
+            name: '筛选 - 空结果',
+            fn: function() {
+                var filtered = filterRecords(mockRecords, { category: '不存在的分类' });
+                return assertEqual(filtered.length, 0, '无匹配记录');
+            }
+        }
+    ]);
+    
+    runSuite('统计数据计算', [
+        {
+            name: '统计 - 总收入计算',
+            fn: function() {
+                var stats = calculateStats(mockRecords);
+                return assertEqual(stats.totalIncome, 12000, '总收入');
+            }
+        },
+        {
+            name: '统计 - 总支出计算',
+            fn: function() {
+                var stats = calculateStats(mockRecords);
+                return assertEqual(stats.totalExpense, 11000, '总支出');
+            }
+        },
+        {
+            name: '统计 - 结余计算',
+            fn: function() {
+                var stats = calculateStats(mockRecords);
+                return assertEqual(stats.balance, 1000, '结余');
+            }
+        },
+        {
+            name: '统计 - 空记录',
+            fn: function() {
+                var stats = calculateStats([]);
+                return assertDeepEqual(stats, { totalIncome: 0, totalExpense: 0, balance: 0 }, '空记录统计');
+            }
+        }
+    ]);
+    
+    var days = [
+        { date: '2024-01-15', label: '1月15日' },
+        { date: '2024-01-16', label: '1月16日' },
+        { date: '2024-01-17', label: '1月17日' },
+        { date: '2024-01-18', label: '1月18日' },
+        { date: '2024-01-19', label: '1月19日' },
+        { date: '2024-01-20', label: '1月20日' },
+        { date: '2024-01-21', label: '1月21日' }
+    ];
+    
+    runSuite('图表数据聚合', [
+        {
+            name: '聚合 - 单日收入聚合',
+            fn: function() {
+                var data = aggregateByDate(mockRecords, days);
+                var day15 = data.find(function(d) { return d.date === '2024-01-15'; });
+                return assertEqual(day15.income, 10000, '1月15日收入');
+            }
+        },
+        {
+            name: '聚合 - 单日支出聚合',
+            fn: function() {
+                var data = aggregateByDate(mockRecords, days);
+                var day16 = data.find(function(d) { return d.date === '2024-01-16'; });
+                return assertEqual(day16.expense, 3000, '1月16日支出');
+            }
+        },
+        {
+            name: '聚合 - 无数据日期初始化为0',
+            fn: function() {
+                var data = aggregateByDate(mockRecords, days);
+                var day21 = data.find(function(d) { return d.date === '2024-01-21'; });
+                return assertDeepEqual({ income: day21.income, expense: day21.expense }, { income: 0, expense: 0 }, '无数据日期');
+            }
+        },
+        {
+            name: '聚合 - 返回数据结构完整',
+            fn: function() {
+                var data = aggregateByDate(mockRecords, days);
+                var hasAllFields = data.every(function(d) {
+                    return d.date && d.label && typeof d.income === 'number' && typeof d.expense === 'number';
+                });
+                return assertTrue(hasAllFields, '数据结构完整');
+            }
+        },
+        {
+            name: '聚合 - 多条记录同日累加',
+            fn: function() {
+                var records = [
+                    { type: 'expense', amount: 100, date: '2024-01-15' },
+                    { type: 'expense', amount: 200, date: '2024-01-15' },
+                    { type: 'income', amount: 500, date: '2024-01-15' }
+                ];
+                var data = aggregateByDate(records, days);
+                var day15 = data.find(function(d) { return d.date === '2024-01-15'; });
+                return assertTrue(day15.expense === 300 && day15.income === 500, '同日累加');
+            }
+        }
+    ]);
+    
+    runSuite('表单校验规则', [
+        {
+            name: '校验 - 有效金额',
+            fn: function() {
+                var result = validateAmount('100.50');
+                return assertTrue(result.isValid, '有效金额校验通过');
+            }
+        },
+        {
+            name: '校验 - 空金额',
+            fn: function() {
+                var result = validateAmount('');
+                return assertFalse(result.isValid, '空金额校验失败');
+            }
+        },
+        {
+            name: '校验 - 非数字金额',
+            fn: function() {
+                var result = validateAmount('abc');
+                return assertFalse(result.isValid, '非数字金额校验失败');
+            }
+        },
+        {
+            name: '校验 - 零金额',
+            fn: function() {
+                var result = validateAmount('0');
+                return assertFalse(result.isValid, '零金额校验失败');
+            }
+        },
+        {
+            name: '校验 - 负金额',
+            fn: function() {
+                var result = validateAmount('-10');
+                return assertFalse(result.isValid, '负金额校验失败');
+            }
+        },
+        {
+            name: '校验 - 超大金额',
+            fn: function() {
+                var result = validateAmount('9999999999');
+                return assertFalse(result.isValid, '超大金额校验失败');
+            }
+        },
+        {
+            name: '校验 - 有效日期',
+            fn: function() {
+                var today = new Date().toISOString().split('T')[0];
+                var result = validateDate(today);
+                return assertTrue(result.isValid, '有效日期校验通过');
+            }
+        },
+        {
+            name: '校验 - 空日期',
+            fn: function() {
+                var result = validateDate('');
+                return assertFalse(result.isValid, '空日期校验失败');
+            }
+        },
+        {
+            name: '校验 - 未来日期',
+            fn: function() {
+                var future = new Date();
+                future.setDate(future.getDate() + 10);
+                var result = validateDate(future.toISOString().split('T')[0]);
+                return assertFalse(result.isValid, '未来日期校验失败');
+            }
+        },
+        {
+            name: '校验 - 有效分类',
+            fn: function() {
+                var result = validateCategory('餐饮');
+                return assertTrue(result.isValid, '有效分类校验通过');
+            }
+        },
+        {
+            name: '校验 - 空分类',
+            fn: function() {
+                var result = validateCategory('');
+                return assertFalse(result.isValid, '空分类校验失败');
+            }
+        },
+        {
+            name: '校验 - 完整记录校验通过',
+            fn: function() {
+                var result = validateRecord({
+                    type: 'expense',
+                    amount: 1000,
+                    category: '餐饮',
+                    date: '2024-01-15'
+                });
+                return assertTrue(result.isValid, '完整记录校验通过');
+            }
+        },
+        {
+            name: '校验 - 缺少字段的记录',
+            fn: function() {
+                var result = validateRecord({
+                    type: 'expense',
+                    amount: 0,
+                    category: '',
+                    date: ''
+                });
+                return assertFalse(result.isValid, '缺少字段校验失败');
+            }
+        },
+        {
+            name: '校验 - 错误信息返回',
+            fn: function() {
+                var result = validateAmount('');
+                return assertTrue(result.error !== null && result.error.length > 0, '返回错误信息');
+            }
+        }
+    ]);
+    
+    var container = document.getElementById('test-results');
+    var html = '';
+    
+    for (var i = 0; i < results.suites.length; i++) {
+        var suite = results.suites[i];
+        html += '<div class="test-suite">' +
+            '<h2>' + suite.name + ' (' + suite.passed + '/' + suite.tests.length + ' 通过)</h2>';
+        
+        for (var j = 0; j < suite.tests.length; j++) {
+            var t = suite.tests[j];
+            html += '<div class="test-case ' + (t.pass ? 'pass' : 'fail') + '">' +
+                '<div class="test-name">' + (t.pass ? '✓' : '✗') + ' ' + t.name + '</div>' +
+                '<div class="test-result">' + t.detail + '</div>' +
+            '</div>';
+        }
+        
+        html += '</div>';
+    }
+    
+    container.innerHTML = html;
+    
+    var summary = document.getElementById('summary');
+    var total = results.passed + results.failed;
+    summary.className = 'summary ' + (results.failed === 0 ? 'pass' : 'fail');
+    summary.textContent = '测试结果: ' + results.passed + '/' + total + ' 通过, ' + results.failed + ' 失败';
+})();
+    </script>
+</body>
+</html>
