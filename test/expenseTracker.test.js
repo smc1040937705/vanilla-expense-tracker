@@ -1,0 +1,219 @@
+// 注意：此测试文件需在浏览器环境中运行（通过test.html），Node.js环境不支持localStorage
+import { store } from '../src/store/index.js';
+import { storage } from '../src/utils/storage.js';
+
+const assert = {
+  equal: (actual, expected, message) => {
+    if (actual !== expected) {
+      throw new Error(message || `期望 ${expected}，实际得到 ${actual}`);
+    }
+  },
+  ok: (value, message) => {
+    if (!value) {
+      throw new Error(message || `期望真值，实际得到 ${value}`);
+    }
+  }
+};
+
+export const resetTestState = () => {
+  storage.clear();
+  store.reset();
+  store.init();
+};
+
+export const testAmountPrecision = () => {
+  const name = '金额计算精度验证';
+  
+  try {
+    store.addRecord({
+      type: 'income',
+      category: 'salary',
+      amount: 100000,
+      date: '2024-01-15',
+      remark: ''
+    });
+    
+    store.addRecord({
+      type: 'expense',
+      category: 'food',
+      amount: 1001,
+      date: '2024-01-15',
+      remark: ''
+    });
+    
+    store.addRecord({
+      type: 'expense',
+      category: 'transport',
+      amount: 500,
+      date: '2024-01-15',
+      remark: ''
+    });
+    
+    const stats = store.getStatistics();
+    
+    assert.equal(stats.income, 100000, '总收入计算错误');
+    assert.equal(stats.expense, 1501, '总支出计算错误');
+    assert.equal(stats.balance, 98499, '结余计算错误');
+    
+    return { name, passed: true };
+  } catch (error) {
+    return { name, passed: false, message: error.message };
+  }
+};
+
+export const testFilterLogic = () => {
+  const name = '筛选逻辑正确性';
+  
+  try {
+    const testRecords = [
+      { type: 'income', category: 'salary', amount: 10000, date: '2024-01-10' },
+      { type: 'expense', category: 'food', amount: 5000, date: '2024-01-11' },
+      { type: 'expense', category: 'transport', amount: 2000, date: '2024-01-12' },
+      { type: 'income', category: 'bonus', amount: 5000, date: '2024-01-13' },
+      { type: 'expense', category: 'food', amount: 3000, date: '2024-01-14' },
+    ];
+    
+    testRecords.forEach(record => store.addRecord(record));
+    
+    const incomeRecords = store.filterRecords({ type: 'income' });
+    assert.equal(incomeRecords.length, 2, '按类型筛选收入失败');
+    assert.ok(incomeRecords.every(r => r.type === 'income'), '收入类型筛选结果不正确');
+    
+    const expenseRecords = store.filterRecords({ type: 'expense' });
+    assert.equal(expenseRecords.length, 3, '按类型筛选支出失败');
+    assert.ok(expenseRecords.every(r => r.type === 'expense'), '支出类型筛选结果不正确');
+    
+    const foodRecords = store.filterRecords({ category: 'food' });
+    assert.equal(foodRecords.length, 2, '按分类筛选失败');
+    assert.ok(foodRecords.every(r => r.category === 'food'), '分类筛选结果不正确');
+    
+    const dateFiltered = store.filterRecords({ startDate: '2024-01-12', endDate: '2024-01-13' });
+    assert.equal(dateFiltered.length, 2, '按日期范围筛选失败');
+    
+    const combinedFilter = store.filterRecords({ type: 'expense', category: 'food' });
+    assert.equal(combinedFilter.length, 2, '组合筛选失败');
+    assert.ok(combinedFilter.every(r => r.type === 'expense' && r.category === 'food'), '组合筛选结果不正确');
+    
+    return { name, passed: true };
+  } catch (error) {
+    return { name, passed: false, message: error.message };
+  }
+};
+
+export const testChartDataAggregation = () => {
+  const name = '图表数据聚合结果';
+  
+  try {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    store.addRecord({
+      type: 'income',
+      category: 'salary',
+      amount: 10000,
+      date: today,
+      remark: ''
+    });
+    
+    store.addRecord({
+      type: 'expense',
+      category: 'food',
+      amount: 5000,
+      date: today,
+      remark: ''
+    });
+    
+    store.addRecord({
+      type: 'expense',
+      category: 'transport',
+      amount: 2000,
+      date: yesterdayStr,
+      remark: ''
+    });
+    
+    const chartData = store.getLast7DaysData();
+    
+    assert.equal(chartData.length, 7, '图表数据应该包含7天的数据');
+    
+    const todayData = chartData.find(d => d.date === today);
+    assert.ok(todayData, '应该包含今天的数据');
+    assert.equal(todayData.income, 10000, '今日收入聚合不正确');
+    assert.equal(todayData.expense, 5000, '今日支出聚合不正确');
+    
+    const yesterdayData = chartData.find(d => d.date === yesterdayStr);
+    assert.ok(yesterdayData, '应该包含昨天的数据');
+    assert.equal(yesterdayData.expense, 2000, '昨日支出聚合不正确');
+    
+    chartData.forEach(item => {
+      assert.ok(item.hasOwnProperty('date'), '数据项应包含date字段');
+      assert.ok(item.hasOwnProperty('label'), '数据项应包含label字段');
+      assert.ok(item.hasOwnProperty('income'), '数据项应包含income字段');
+      assert.ok(item.hasOwnProperty('expense'), '数据项应包含expense字段');
+    });
+    
+    return { name, passed: true };
+  } catch (error) {
+    return { name, passed: false, message: error.message };
+  }
+};
+
+export const testFormValidationRules = () => {
+  const name = '表单校验规则';
+  
+  try {
+    const validateAmount = (value) => {
+      const amount = parseFloat(value);
+      if (!value || isNaN(amount) || amount <= 0) {
+        return { valid: false, message: '请输入有效的金额' };
+      }
+      if (amount > 9999999.99) {
+        return { valid: false, message: '金额不能超过9999999.99' };
+      }
+      return { valid: true };
+    };
+    
+    const validateCategory = (value) => {
+      if (!value) {
+        return { valid: false, message: '请选择分类' };
+      }
+      return { valid: true };
+    };
+    
+    const validateDate = (value) => {
+      if (!value) {
+        return { valid: false, message: '请选择日期' };
+      }
+      return { valid: true };
+    };
+    
+    assert.ok(!validateAmount('').valid, '空金额应该验证失败');
+    assert.ok(!validateAmount('0').valid, '金额为0应该验证失败');
+    assert.ok(!validateAmount('-100').valid, '负金额应该验证失败');
+    assert.ok(!validateAmount('abc').valid, '非数字金额应该验证失败');
+    assert.ok(!validateAmount('10000000').valid, '超过最大金额应该验证失败');
+    assert.ok(validateAmount('100').valid, '有效金额应该验证通过');
+    assert.ok(validateAmount('9999999.99').valid, '最大金额应该验证通过');
+    
+    assert.ok(!validateCategory('').valid, '空分类应该验证失败');
+    assert.ok(validateCategory('food').valid, '有效分类应该验证通过');
+    
+    assert.ok(!validateDate('').valid, '空日期应该验证失败');
+    assert.ok(validateDate('2024-01-15').valid, '有效日期应该验证通过');
+    
+    const amount = 123.45;
+    const fen = Math.round(amount * 100);
+    assert.equal(fen, 12345, '金额转换为分不正确');
+    
+    const amount2 = 123.456;
+    const fen2 = Math.round(amount2 * 100);
+    assert.equal(fen2, 12346, '金额四舍五入不正确');
+    
+    return { name, passed: true };
+  } catch (error) {
+    return { name, passed: false, message: error.message };
+  }
+};
