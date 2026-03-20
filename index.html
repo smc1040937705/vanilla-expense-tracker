@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人收支记账</title>
+  <link rel="stylesheet" href="./styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <h1>个人收支记账</h1>
+    </header>
+    
+    <main class="app-main">
+      <section class="stats-section" id="stats-container"></section>
+      
+      <section class="chart-section">
+        <h2>近7天收支趋势</h2>
+        <div id="chart-container"></div>
+      </section>
+      
+      <section class="filter-section" id="filter-container"></section>
+      
+      <section class="form-section" id="form-container"></section>
+      
+      <section class="list-section">
+        <h2>收支记录</h2>
+        <div id="list-container"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 工具函数 -->
+  <script>
+    /**
+     * 金额计算工具函数
+     * 使用整数分单位，避免浮点误差
+     */
+    const MoneyUtils = {
+      toCents(yuan) {
+        if (typeof yuan === 'string') {
+          yuan = parseFloat(yuan);
+        }
+        if (isNaN(yuan)) {
+          return 0;
+        }
+        return Math.round(yuan * 100);
+      },
+
+      toYuan(cents, decimals = 2) {
+        if (typeof cents !== 'number' || isNaN(cents)) {
+          cents = 0;
+        }
+        return (cents / 100).toFixed(decimals);
+      },
+
+      formatMoney(cents, showSign = false) {
+        const yuan = this.toYuan(cents);
+        const sign = showSign && cents > 0 ? '+' : '';
+        return `¥${sign}${yuan}`;
+      },
+
+      add(a, b) {
+        return Math.round(a) + Math.round(b);
+      },
+
+      subtract(a, b) {
+        return Math.round(a) - Math.round(b);
+      },
+
+      sum(centsArray) {
+        return centsArray.reduce((acc, curr) => acc + Math.round(curr), 0);
+      },
+
+      calculateBalance(income, expense) {
+        return this.subtract(income, expense);
+      }
+    };
+
+    /**
+     * 日期工具函数
+     */
+    const DateUtils = {
+      formatDate(date, format = 'YYYY-MM-DD') {
+        const d = typeof date === 'string' ? new Date(date) : date;
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return format
+          .replace('YYYY', year)
+          .replace('MM', month)
+          .replace('DD', day);
+      },
+
+      getToday() {
+        return this.formatDate(new Date());
+      },
+
+      getRecentDays(days = 7) {
+        const result = [];
+        const today = new Date();
+        for (let i = days - 1; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          result.push(this.formatDate(date));
+        }
+        return result;
+      },
+
+      getWeekDay(dateStr) {
+        const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const date = new Date(dateStr);
+        return days[date.getDay()];
+      }
+    };
+
+    /**
+     * localStorage 存储工具
+     */
+    const StorageUtils = {
+      STORAGE_KEY: 'expense_tracker_records',
+
+      getRecords() {
+        try {
+          const data = localStorage.getItem(this.STORAGE_KEY);
+          return data ? JSON.parse(data) : [];
+        } catch (e) {
+          console.error('读取本地数据失败:', e);
+          return [];
+        }
+      },
+
+      saveRecords(records) {
+        try {
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(records));
+        } catch (e) {
+          console.error('保存数据失败:', e);
+        }
+      },
+
+      addRecord(record) {
+        const records = this.getRecords();
+        const newRecord = {
+          ...record,
+          id: Date.now().toString(),
+          createdAt: new Date().toISOString()
+        };
+        records.push(newRecord);
+        this.saveRecords(records);
+        return newRecord;
+      },
+
+      deleteRecord(id) {
+        const records = this.getRecords();
+        const index = records.findIndex(r => r.id === id);
+        if (index > -1) {
+          records.splice(index, 1);
+          this.saveRecords(records);
+          return true;
+        }
+        return false;
+      },
+
+      initMockData() {
+        const existing = this.getRecords();
+        if (existing.length === 0) {
+          const mockData = this.generateMockData();
+          this.saveRecords(mockData);
+        }
+      },
+
+      generateMockData() {
+        const categories = {
+          income: ['工资', '奖金', '投资', '兼职'],
+          expense: ['餐饮', '交通', '购物', '娱乐', '住房', '医疗']
+        };
+        const records = [];
+        const now = new Date();
+        for (let i = 0; i < 50; i++) {
+          const isIncome = Math.random() > 0.6;
+          const type = isIncome ? 'income' : 'expense';
+          const categoryList = categories[type];
+          const category = categoryList[Math.floor(Math.random() * categoryList.length)];
+          const date = new Date(now);
+          date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+          const amountCents = isIncome 
+            ? Math.floor(Math.random() * 500000) + 10000
+            : Math.floor(Math.random() * 20000) + 1000;
+          records.push({
+            id: Date.now().toString() + i,
+            type,
+            amount: amountCents,
+            category,
+            note: `${category}支出`,
+            date: date.toISOString().split('T')[0],
+            createdAt: date.toISOString()
+          });
+        }
+        return records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      }
+    };
+
+    /**
+     * 表单验证工具
+     */
+    const ValidatorUtils = {
+      validateAmount(value) {
+        if (value === '' || value === null || value === undefined) {
+          return '请输入金额';
+        }
+        const num = parseFloat(value);
+        if (isNaN(num)) {
+          return '金额必须是数字';
+        }
+        if (num <= 0) {
+          return '金额必须大于0';
+        }
+        if (num > 9999999) {
+          return '金额超出范围';
+        }
+        const decimalStr = value.toString().split('.')[1];
+        if (decimalStr && decimalStr.length > 2) {
+          return '金额最多保留两位小数';
+        }
+        return null;
+      },
+
+      validateCategory(value) {
+        if (!value || value.trim() === '') {
+          return '请选择分类';
+        }
+        return null;
+      },
+
+      validateDate(value) {
+        if (!value) {
+          return '请选择日期';
+        }
+        const date = new Date(value);
+        if (isNaN(date.getTime())) {
+          return '日期格式不正确';
+        }
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        if (date > today) {
+          return '不能选择未来日期';
+        }
+        return null;
+      },
+
+      validateNote(value) {
+        if (value && value.length > 100) {
+          return '备注不能超过100个字符';
+        }
+        return null;
+      },
+
+      validateForm(formData) {
+        const errors = {};
+        const amountError = this.validateAmount(formData.amount);
+        if (amountError) errors.amount = amountError;
+        const categoryError = this.validateCategory(formData.category);
+        if (categoryError) errors.category = categoryError;
+        const dateError = this.validateDate(formData.date);
+        if (dateError) errors.date = dateError;
+        const noteError = this.validateNote(formData.note);
+        if (noteError) errors.note = noteError;
+        return {
+          valid: Object.keys(errors).length === 0,
+          errors
+        };
+      }
+    };
+  </script>
+
+  <!-- 组件 -->
+  <script>
+    /**
+     * 统计卡片组件
+     */
+    const StatCard = {
+      render: function(props) {
+        const title = props.title;
+        const amount = props.amount;
+        const type = props.type;
+        const typeClass = 'stat-card--' + type;
+        return `
+          <div class="stat-card ${typeClass}">
+            <div class="stat-card__title">${title}</div>
+            <div class="stat-card__amount">${MoneyUtils.formatMoney(amount)}</div>
+          </div>
+        `;
+      },
+
+      renderGroup: function(props) {
+        const income = props.income;
+        const expense = props.expense;
+        const balance = props.balance;
+        return `
+          ${StatCard.render({ title: '总收入', amount: income, type: 'income' })}
+          ${StatCard.render({ title: '总支出', amount: expense, type: 'expense' })}
+          ${StatCard.render({ title: '结余', amount: balance, type: 'balance' })}
+        `;
+      }
+    };
+
+    /**
+     * 图表组件
+     */
+    const Chart = {
+      render: function(records) {
+        const self = this;
+        setTimeout(function() { self.draw(records); }, 0);
+        return `
+          <div class="chart-container">
+            <canvas id="trend-chart" class="chart-canvas"></canvas>
+          </div>
+        `;
+      },
+
+      aggregateData: function(records) {
+        const recentDays = DateUtils.getRecentDays(7);
+        const data = {
+          labels: recentDays.map(function(date) {
+            const d = new Date(date);
+            return (d.getMonth() + 1) + '/' + d.getDate();
+          }),
+          income: new Array(7).fill(0),
+          expense: new Array(7).fill(0)
+        };
+        if (!records) return data;
+        records.forEach(function(record) {
+          const dayIndex = recentDays.indexOf(record.date);
+          if (dayIndex > -1) {
+            if (record.type === 'income') {
+              data.income[dayIndex] += record.amount;
+            } else {
+              data.expense[dayIndex] += record.amount;
+            }
+          }
+        });
+        return data;
+      },
+
+      draw: function(records) {
+        const canvas = document.getElementById('trend-chart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const data = this.aggregateData(records);
+        const container = canvas.parentElement;
+        const dpr = window.devicePixelRatio || 1;
+        const rect = container.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        ctx.scale(dpr, dpr);
+        const width = rect.width;
+        const height = rect.height;
+        const padding = { top: 40, right: 20, bottom: 50, left: 60 };
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+        ctx.clearRect(0, 0, width, height);
+        const maxValue = Math.max.apply(null, data.income.concat(data.expense).concat([100]));
+        const incomeColor = '#4caf50';
+        const expenseColor = '#f44336';
+        const gridColor = '#e0e0e0';
+        const textColor = '#666666';
+        const gridLines = 5;
+        ctx.strokeStyle = gridColor;
+        ctx.lineWidth = 1;
+        ctx.fillStyle = textColor;
+        ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= gridLines; i++) {
+          const y = padding.top + (chartHeight / gridLines) * i;
+          const value = maxValue * (1 - i / gridLines);
+          ctx.beginPath();
+          ctx.moveTo(padding.left, y);
+          ctx.lineTo(width - padding.right, y);
+          ctx.stroke();
+          ctx.fillText('¥' + MoneyUtils.toYuan(value, 0), padding.left - 8, y);
+        }
+        const barGroupWidth = chartWidth / data.labels.length;
+        const barWidth = barGroupWidth * 0.35;
+        const barGap = barGroupWidth * 0.1;
+        data.labels.forEach(function(label, index) {
+          const x = padding.left + barGroupWidth * index + barGroupWidth / 2;
+          const incomeHeight = (data.income[index] / maxValue) * chartHeight;
+          const incomeY = padding.top + chartHeight - incomeHeight;
+          ctx.fillStyle = incomeColor;
+          ctx.fillRect(x - barWidth - barGap / 2, incomeY, barWidth, incomeHeight);
+          const expenseHeight = (data.expense[index] / maxValue) * chartHeight;
+          const expenseY = padding.top + chartHeight - expenseHeight;
+          ctx.fillStyle = expenseColor;
+          ctx.fillRect(x + barGap / 2, expenseY, barWidth, expenseHeight);
+          ctx.fillStyle = textColor;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(label, x, padding.top + chartHeight + 8);
+        });
+        const legendY = 20;
+        const legendX = width - padding.right - 120;
+        ctx.fillStyle = incomeColor;
+        ctx.fillRect(legendX, legendY - 6, 12, 12);
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('收入', legendX + 18, legendY);
+        ctx.fillStyle = expenseColor;
+        ctx.fillRect(legendX + 60, legendY - 6, 12, 12);
+        ctx.fillStyle = textColor;
+        ctx.fillText('支出', legendX + 78, legendY);
+      }
+    };
+
+    /**
+     * 筛选栏组件
+     */
+    const FilterBar = {
+      CATEGORIES: [
+        { value: '', label: '全部分类' },
+        { value: '工资', label: '工资' },
+        { value: '奖金', label: '奖金' },
+        { value: '投资', label: '投资' },
+        { value: '兼职', label: '兼职' },
+        { value: '其他收入', label: '其他收入' },
+        { value: '餐饮', label: '餐饮' },
+        { value: '交通', label: '交通' },
+        { value: '购物', label: '购物' },
+        { value: '娱乐', label: '娱乐' },
+        { value: '住房', label: '住房' },
+        { value: '医疗', label: '医疗' },
+        { value: '教育', label: '教育' },
+        { value: '其他支出', label: '其他支出' }
+      ],
+
+      render(onFilter, initialFilters = {}) {
+        window._filterBarCallback = onFilter;
+        const { type = '', category = '', startDate = '', endDate = '' } = initialFilters;
+        return `
+          <div class="filter-bar">
+            <div class="filter-group">
+              <label>类型</label>
+              <select id="filter-type" onchange="FilterBar.handleChange()">
+                <option value="">全部</option>
+                <option value="income" ${type === 'income' ? 'selected' : ''}>收入</option>
+                <option value="expense" ${type === 'expense' ? 'selected' : ''}>支出</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>分类</label>
+              <select id="filter-category" onchange="FilterBar.handleChange()">
+                ${this.CATEGORIES.map(c => `<option value="${c.value}" ${category === c.value ? 'selected' : ''}>${c.label}</option>`).join('')}
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>开始日期</label>
+              <input type="date" id="filter-start" value="${startDate}" onchange="FilterBar.handleChange()" />
+            </div>
+            <div class="filter-group">
+              <label>结束日期</label>
+              <input type="date" id="filter-end" value="${endDate}" onchange="FilterBar.handleChange()" max="${DateUtils.getToday()}" />
+            </div>
+            <button class="filter-btn" onclick="FilterBar.reset()">重置</button>
+          </div>
+        `;
+      },
+
+      getFilters() {
+        const type = document.getElementById('filter-type')?.value || '';
+        const category = document.getElementById('filter-category')?.value || '';
+        const startDate = document.getElementById('filter-start')?.value || '';
+        const endDate = document.getElementById('filter-end')?.value || '';
+        const filters = {};
+        if (type) filters.type = type;
+        if (category) filters.category = category;
+        if (startDate) filters.startDate = startDate;
+        if (endDate) filters.endDate = endDate;
+        return filters;
+      },
+
+      handleChange: function() {
+        const filters = FilterBar.getFilters();
+        if (window._filterBarCallback) {
+          window._filterBarCallback(filters);
+        }
+      },
+
+      reset: function() {
+        const typeSelect = document.getElementById('filter-type');
+        const categorySelect = document.getElementById('filter-category');
+        const startInput = document.getElementById('filter-start');
+        const endInput = document.getElementById('filter-end');
+        if (typeSelect) typeSelect.value = '';
+        if (categorySelect) categorySelect.value = '';
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+        if (window._filterBarCallback) {
+          window._filterBarCallback({});
+        }
+      },
+
+      filterRecords(records, filters) {
+        if (!filters || Object.keys(filters).length === 0) {
+          return records;
+        }
+        return records.filter(record => {
+          if (filters.type && record.type !== filters.type) {
+            return false;
+          }
+          if (filters.category && record.category !== filters.category) {
+            return false;
+          }
+          if (filters.startDate && record.date < filters.startDate) {
+            return false;
+          }
+          if (filters.endDate && record.date > filters.endDate) {
+            return false;
+          }
+          return true;
+        });
+      }
+    };
+
+    /**
+     * 记录表单组件
+     */
+    const RecordForm = {
+      CATEGORIES: {
+        income: ['工资', '奖金', '投资', '兼职', '其他收入'],
+        expense: ['餐饮', '交通', '购物', '娱乐', '住房', '医疗', '教育', '其他支出']
+      },
+
+      render(onSubmit) {
+        window._recordFormSubmit = onSubmit;
+        return `
+          <form class="record-form" id="record-form">
+            <div class="form-group">
+              <label for="record-type">类型</label>
+              <select id="record-type" name="type" onchange="RecordForm.updateCategories()">
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="record-amount">金额</label>
+              <input type="number" id="record-amount" name="amount" placeholder="0.00" step="0.01" min="0" />
+              <span class="form-error" id="error-amount"></span>
+            </div>
+            <div class="form-group">
+              <label for="record-category">分类</label>
+              <select id="record-category" name="category">
+                ${this.CATEGORIES.expense.map(c => `<option value="${c}">${c}</option>`).join('')}
+              </select>
+              <span class="form-error" id="error-category"></span>
+            </div>
+            <div class="form-group">
+              <label for="record-date">日期</label>
+              <input type="date" id="record-date" name="date" value="${DateUtils.getToday()}" max="${DateUtils.getToday()}" />
+              <span class="form-error" id="error-date"></span>
+            </div>
+            <div class="form-group">
+              <label for="record-note">备注</label>
+              <textarea id="record-note" name="note" placeholder="可选填"></textarea>
+              <span class="form-error" id="error-note"></span>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn--primary">添加记录</button>
+              <button type="button" class="btn btn--secondary" onclick="RecordForm.reset()">重置</button>
+            </div>
+          </form>
+        `;
+      },
+
+      updateCategories: function() {
+        const typeSelect = document.getElementById('record-type');
+        const categorySelect = document.getElementById('record-category');
+        const type = typeSelect.value;
+        categorySelect.innerHTML = RecordForm.CATEGORIES[type]
+          .map(function(c) { return `<option value="${c}">${c}</option>`; })
+          .join('');
+      },
+
+      reset: function() {
+        const form = document.getElementById('record-form');
+        if (form) {
+          form.reset();
+          document.getElementById('record-date').value = DateUtils.getToday();
+          RecordForm.updateCategories();
+          RecordForm.clearErrors();
+        }
+      },
+
+      clearErrors: function() {
+        document.querySelectorAll('.form-error').forEach(function(el) { el.textContent = ''; });
+        document.querySelectorAll('.form-group--error').forEach(function(el) {
+          el.classList.remove('form-group--error');
+        });
+      },
+
+      showErrors: function(errors) {
+        RecordForm.clearErrors();
+        Object.entries(errors).forEach(function([field, message]) {
+          const errorEl = document.getElementById('error-' + field);
+          const inputEl = document.querySelector('[name="' + field + '"]');
+          if (errorEl) errorEl.textContent = message;
+          if (inputEl) {
+            const group = inputEl.closest('.form-group');
+            if (group) group.classList.add('form-group--error');
+          }
+        });
+      },
+
+      getData: function() {
+        const form = document.getElementById('record-form');
+        if (!form) return null;
+        const formData = new FormData(form);
+        const data = {
+          type: formData.get('type'),
+          amount: formData.get('amount'),
+          category: formData.get('category'),
+          date: formData.get('date'),
+          note: formData.get('note') || ''
+        };
+        const validation = ValidatorUtils.validateForm(data);
+        if (!validation.valid) {
+          RecordForm.showErrors(validation.errors);
+          return null;
+        }
+        return {
+          type: data.type,
+          amount: MoneyUtils.toCents(data.amount),
+          category: data.category,
+          date: data.date,
+          note: data.note
+        };
+      },
+
+      init: function() {
+        const form = document.getElementById('record-form');
+        if (!form) return;
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          const data = RecordForm.getData();
+          if (data && window._recordFormSubmit) {
+            window._recordFormSubmit(data);
+            RecordForm.reset();
+          }
+        });
+      }
+    };
+
+    /**
+     * 记录列表组件
+     */
+    const RecordList = {
+      render: function(records, onDelete) {
+        window._recordListDelete = onDelete;
+        if (!records || records.length === 0) {
+          return '<div class="record-list__empty">暂无记录</div>';
+        }
+        const self = this;
+        return `
+          <div class="record-list">
+            ${records.map(function(record) { return self.renderItem(record); }).join('')}
+          </div>
+        `;
+      },
+
+      renderItem: function(record) {
+        const isIncome = record.type === 'income';
+        const typeText = isIncome ? '收' : '支';
+        const typeClass = isIncome ? 'income' : 'expense';
+        const amountClass = 'record-item__amount--' + typeClass;
+        const sign = isIncome ? '+' : '-';
+        const dateStr = DateUtils.formatDate(record.date, 'MM-DD');
+        const weekDay = DateUtils.getWeekDay(record.date);
+        const noteHtml = record.note ? '<span class="record-item__note">' + record.note + '</span>' : '';
+        return `
+          <div class="record-item" data-id="${record.id}">
+            <div class="record-item__type record-item__type--${typeClass}">${typeText}</div>
+            <div class="record-item__info">
+              <span class="record-item__category">${record.category}</span>
+              ${noteHtml}
+            </div>
+            <div class="record-item__amount ${amountClass}">${sign}${MoneyUtils.formatMoney(record.amount).replace('¥', '')}</div>
+            <div class="record-item__date">${dateStr} ${weekDay}</div>
+            <button class="record-item__delete" onclick="RecordList.delete('${record.id}')">删除</button>
+          </div>
+        `;
+      },
+
+      delete: function(id) {
+        if (confirm('确定要删除这条记录吗？')) {
+          if (window._recordListDelete) {
+            window._recordListDelete(id);
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- 主应用 -->
+  <script>
+    /**
+     * 主应用类
+     */
+    class ExpenseTracker {
+      constructor() {
+        this.records = [];
+        this.filteredRecords = [];
+        this.currentFilters = {};
+        this.statsContainer = document.getElementById('stats-container');
+        this.chartContainer = document.getElementById('chart-container');
+        this.filterContainer = document.getElementById('filter-container');
+        this.formContainer = document.getElementById('form-container');
+        this.listContainer = document.getElementById('list-container');
+        this.init();
+      }
+
+      init() {
+        const self = this;
+        StorageUtils.initMockData();
+        this.loadRecords();
+        this.renderFilterBar();
+        this.renderForm();
+        this.renderAll();
+        window.addEventListener('resize', function() {
+          self.renderChart();
+        });
+      }
+
+      loadRecords() {
+        this.records = StorageUtils.getRecords();
+        this.applyFilters();
+      }
+
+      applyFilters() {
+        this.filteredRecords = FilterBar.filterRecords(this.records, this.currentFilters);
+      }
+
+      calculateStats() {
+        const incomeRecords = this.records.filter(function(r) { return r.type === 'income'; });
+        const expenseRecords = this.records.filter(function(r) { return r.type === 'expense'; });
+        const income = MoneyUtils.sum(incomeRecords.map(function(r) { return r.amount; }));
+        const expense = MoneyUtils.sum(expenseRecords.map(function(r) { return r.amount; }));
+        const balance = MoneyUtils.calculateBalance(income, expense);
+        return { income: income, expense: expense, balance: balance };
+      }
+
+      renderStats() {
+        const stats = this.calculateStats();
+        this.statsContainer.innerHTML = StatCard.renderGroup(stats);
+      }
+
+      renderChart() {
+        this.chartContainer.innerHTML = Chart.render(this.records);
+      }
+
+      renderFilterBar() {
+        const self = this;
+        this.filterContainer.innerHTML = FilterBar.render(
+          function(filters) { self.handleFilter(filters); },
+          this.currentFilters
+        );
+      }
+
+      renderForm() {
+        const self = this;
+        this.formContainer.innerHTML = RecordForm.render(function(data) { self.handleAddRecord(data); });
+        setTimeout(function() { RecordForm.init(); }, 0);
+      }
+
+      renderList() {
+        const self = this;
+        this.listContainer.innerHTML = RecordList.render(
+          this.filteredRecords,
+          function(id) { self.handleDeleteRecord(id); }
+        );
+      }
+
+      renderAll() {
+        this.renderStats();
+        this.renderChart();
+        this.renderList();
+      }
+
+      handleFilter(filters) {
+        this.currentFilters = filters;
+        this.applyFilters();
+        this.renderList();
+      }
+
+      handleAddRecord(data) {
+        StorageUtils.addRecord(data);
+        this.loadRecords();
+        this.renderAll();
+      }
+
+      handleDeleteRecord(id) {
+        StorageUtils.deleteRecord(id);
+        this.loadRecords();
+        this.renderAll();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      new ExpenseTracker();
+    });
+  </script>
+</body>
+</html>
