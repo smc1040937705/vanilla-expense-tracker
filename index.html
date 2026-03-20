@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人收支记账</title>
+    <style>
+:root {
+    --color-primary: #1d90f5;
+    --color-danger: #f44336;
+    --color-success: #4caf50;
+    --color-bg: #f5f7fa;
+    --color-card: #ffffff;
+    --color-text: #333333;
+    --color-text-secondary: #666666;
+    --color-border: #e0e0e0;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --radius: 8px;
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+}
+
+.app-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-md);
+}
+
+.app-header {
+    text-align: center;
+    padding: var(--spacing-lg) 0;
+    margin-bottom: var(--spacing-lg);
+}
+
+.app-header h1 {
+    color: var(--color-primary);
+    font-size: 1.75rem;
+}
+
+.app-main {
+    display: grid;
+    gap: var(--spacing-lg);
+}
+
+.stats-section {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-md);
+}
+
+@media (max-width: 768px) {
+    .stats-section {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stat-card {
+    background: var(--color-card);
+    border-radius: var(--radius);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
+.stat-card.income {
+    border-top: 4px solid var(--color-success);
+}
+
+.stat-card.expense {
+    border-top: 4px solid var(--color-danger);
+}
+
+.stat-card.balance {
+    border-top: 4px solid var(--color-primary);
+}
+
+.stat-card .stat-label {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.stat-card .stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.stat-card.income .stat-value {
+    color: var(--color-success);
+}
+
+.stat-card.expense .stat-value {
+    color: var(--color-danger);
+}
+
+.stat-card.balance .stat-value {
+    color: var(--color-primary);
+}
+
+.chart-section {
+    background: var(--color-card);
+    border-radius: var(--radius);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow);
+}
+
+.chart-section h2 {
+    font-size: 1rem;
+    margin-bottom: var(--spacing-md);
+    color: var(--color-text-secondary);
+}
+
+.chart-container {
+    width: 100%;
+    height: 250px;
+}
+
+.chart-container canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.filter-section {
+    background: var(--color-card);
+    border-radius: var(--radius);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow);
+}
+
+.filter-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    align-items: end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.filter-group label {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+}
+
+.filter-group input,
+.filter-group select {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.filter-group input:focus,
+.filter-group select:focus {
+    border-color: var(--color-primary);
+}
+
+.filter-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-primary {
+    background: var(--color-primary);
+    color: white;
+}
+
+.btn-secondary {
+    background: var(--color-border);
+    color: var(--color-text);
+}
+
+.form-section {
+    background: var(--color-card);
+    border-radius: var(--radius);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow);
+}
+
+.record-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--spacing-md);
+    align-items: end;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.form-group label {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--color-primary);
+}
+
+.form-group input.error,
+.form-group select.error,
+.form-group textarea.error {
+    border-color: var(--color-danger);
+}
+
+.form-group .error-message {
+    font-size: 0.75rem;
+    color: var(--color-danger);
+    min-height: 1rem;
+}
+
+.form-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.type-toggle {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.type-toggle .type-btn {
+    flex: 1;
+    padding: var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.type-toggle .type-btn.active.income {
+    background: var(--color-success);
+    color: white;
+    border-color: var(--color-success);
+}
+
+.type-toggle .type-btn.active.expense {
+    background: var(--color-danger);
+    color: white;
+    border-color: var(--color-danger);
+}
+
+.records-section {
+    background: var(--color-card);
+    border-radius: var(--radius);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow);
+}
+
+.records-section h2 {
+    font-size: 1rem;
+    margin-bottom: var(--spacing-md);
+    color: var(--color-text-secondary);
+}
+
+.records-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.record-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: var(--spacing-md);
+    align-items: center;
+    padding: var(--spacing-md);
+    background: var(--color-bg);
+    border-radius: var(--radius);
+    border-left: 4px solid transparent;
+}
+
+.record-item.income {
+    border-left-color: var(--color-success);
+}
+
+.record-item.expense {
+    border-left-color: var(--color-danger);
+}
+
+.record-type-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.record-type-icon.income {
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.record-type-icon.expense {
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.record-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.record-category {
+    font-weight: 500;
+}
+
+.record-note {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.record-date {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.record-amount {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.record-amount.income {
+    color: var(--color-success);
+}
+
+.record-amount.expense {
+    color: var(--color-danger);
+}
+
+.record-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    background: var(--color-border);
+}
+
+.btn-icon.delete:hover {
+    background: var(--color-danger);
+    border-color: var(--color-danger);
+    color: white;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--color-text-secondary);
+}
+
+@media (max-width: 480px) {
+    .record-item {
+        grid-template-columns: auto 1fr auto;
+    }
+    
+    .record-date {
+        grid-column: 2;
+    }
+    
+    .record-actions {
+        grid-column: 3;
+        grid-row: 1 / 3;
+    }
+    
+    .record-form {
+        grid-template-columns: 1fr;
+    }
+    
+    .filter-bar {
+        grid-template-columns: 1fr;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1>个人收支记账</h1>
+        </header>
+        
+        <main class="app-main">
+            <section class="stats-section" id="stats-section"></section>
+            
+            <section class="chart-section">
+                <h2>近7天收支趋势</h2>
+                <div class="chart-container">
+                    <canvas id="trend-chart"></canvas>
+                </div>
+            </section>
+            
+            <section class="filter-section" id="filter-section"></section>
+            
+            <section class="form-section" id="form-section"></section>
+            
+            <section class="records-section">
+                <h2>收支记录</h2>
+                <div id="records-list"></div>
+            </section>
+        </main>
+    </div>
+    
+    <script>
+(function() {
+    'use strict';
+    
+    var STORAGE_KEY = 'expense_tracker_records';
+    
+    function yuanToFen(yuan) {
+        return Math.round(yuan * 100);
+    }
+    
+    function fenToYuan(fen) {
+        return fen / 100;
+    }
+    
+    function formatMoney(fen, showSign) {
+        var yuan = fenToYuan(fen);
+        var formatted = Math.abs(yuan).toFixed(2);
+        if (showSign && fen !== 0) {
+            return fen > 0 ? '+' + formatted : '-' + formatted;
+        }
+        return formatted;
+    }
+    
+    function getRecords() {
+        try {
+            var data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            console.error('Failed to load records:', e);
+            return [];
+        }
+    }
+    
+    function saveRecords(records) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+            return true;
+        } catch (e) {
+            console.error('Failed to save records:', e);
+            return false;
+        }
+    }
+    
+    function addRecord(record) {
+        var records = getRecords();
+        var newRecord = {
+            id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+            type: record.type,
+            amount: record.amount,
+            category: record.category,
+            note: record.note || '',
+            date: record.date,
+            createdAt: new Date().toISOString()
+        };
+        records.push(newRecord);
+        saveRecords(records);
+        return newRecord;
+    }
+    
+    function deleteRecordById(id) {
+        var records = getRecords();
+        var filtered = records.filter(function(r) { return r.id !== id; });
+        saveRecords(filtered);
+        return filtered;
+    }
+    
+    function getDateString(date) {
+        return date.toISOString().split('T')[0];
+    }
+    
+    function getLast7Days() {
+        var days = [];
+        for (var i = 6; i >= 0; i--) {
+            var date = new Date();
+            date.setDate(date.getDate() - i);
+            var month = date.getMonth() + 1;
+            var day = date.getDate();
+            days.push({
+                date: getDateString(date),
+                label: month + '月' + day + '日'
+            });
+        }
+        return days;
+    }
+    
+    function getMockData() {
+        var today = new Date();
+        var records = [];
+        
+        var categories = {
+            income: ['工资', '奖金', '投资收益', '兼职', '其他收入'],
+            expense: ['餐饮', '交通', '购物', '娱乐', '医疗', '教育', '住房', '其他支出']
+        };
+        
+        for (var i = 0; i < 30; i++) {
+            var date = new Date(today);
+            date.setDate(date.getDate() - i);
+            var dateStr = getDateString(date);
+            
+            var numRecords = Math.floor(Math.random() * 3) + 1;
+            for (var j = 0; j < numRecords; j++) {
+                var isIncome = Math.random() < 0.3;
+                var type = isIncome ? 'income' : 'expense';
+                var categoryList = categories[type];
+                var category = categoryList[Math.floor(Math.random() * categoryList.length)];
+                
+                var amount;
+                if (isIncome) {
+                    amount = Math.floor(Math.random() * 10000 + 1000) * 100;
+                } else {
+                    amount = Math.floor(Math.random() * 500 + 10) * 100;
+                }
+                
+                records.push({
+                    id: 'mock_' + i + '_' + j,
+                    type: type,
+                    amount: amount,
+                    category: category,
+                    note: category + '记录',
+                    date: dateStr,
+                    createdAt: date.toISOString()
+                });
+            }
+        }
+        
+        return records;
+    }
+    
+    function initializeData() {
+        var existing = getRecords();
+        if (existing.length === 0) {
+            var mockData = getMockData();
+            saveRecords(mockData);
+            return mockData;
+        }
+        return existing;
+    }
+    
+    function filterRecords(records, filters) {
+        var result = records.slice();
+        
+        if (filters.type && filters.type !== 'all') {
+            result = result.filter(function(r) { return r.type === filters.type; });
+        }
+        
+        if (filters.category && filters.category !== 'all') {
+            result = result.filter(function(r) { return r.category === filters.category; });
+        }
+        
+        if (filters.startDate) {
+            result = result.filter(function(r) { return r.date >= filters.startDate; });
+        }
+        
+        if (filters.endDate) {
+            result = result.filter(function(r) { return r.date <= filters.endDate; });
+        }
+        
+        result.sort(function(a, b) {
+            var dateCompare = b.date.localeCompare(a.date);
+            if (dateCompare !== 0) return dateCompare;
+            return b.createdAt.localeCompare(a.createdAt);
+        });
+        
+        return result;
+    }
+    
+    function calculateStats(records) {
+        var totalIncome = 0;
+        var totalExpense = 0;
+        
+        for (var i = 0; i < records.length; i++) {
+            var record = records[i];
+            if (record.type === 'income') {
+                totalIncome += record.amount;
+            } else {
+                totalExpense += record.amount;
+            }
+        }
+        
+        return {
+            totalIncome: totalIncome,
+            totalExpense: totalExpense,
+            balance: totalIncome - totalExpense
+        };
+    }
+    
+    function aggregateByDate(records, days) {
+        var dateMap = {};
+        
+        for (var i = 0; i < days.length; i++) {
+            dateMap[days[i].date] = { income: 0, expense: 0 };
+        }
+        
+        for (var j = 0; j < records.length; j++) {
+            var record = records[j];
+            var data = dateMap[record.date];
+            if (data) {
+                if (record.type === 'income') {
+                    data.income += record.amount;
+                } else {
+                    data.expense += record.amount;
+                }
+            }
+        }
+        
+        return days.map(function(day) {
+            var d = dateMap[day.date];
+            return {
+                date: day.date,
+                label: day.label,
+                income: d.income,
+                expense: d.expense
+            };
+        });
+    }
+    
+    function getCategories(records) {
+        var categories = {};
+        for (var i = 0; i < records.length; i++) {
+            categories[records[i].category] = true;
+        }
+        return Object.keys(categories).sort();
+    }
+    
+    function getCategoriesByType(type) {
+        var categories = {
+            income: ['工资', '奖金', '投资收益', '兼职', '其他收入'],
+            expense: ['餐饮', '交通', '购物', '娱乐', '医疗', '教育', '住房', '其他支出']
+        };
+        return categories[type] || [];
+    }
+    
+    function validateAmount(value) {
+        if (value === '' || value === null || value === undefined) {
+            return { isValid: false, error: '请输入金额' };
+        }
+        
+        var num = parseFloat(value);
+        if (isNaN(num)) {
+            return { isValid: false, error: '请输入有效的数字' };
+        }
+        
+        if (num <= 0) {
+            return { isValid: false, error: '金额必须大于0' };
+        }
+        
+        if (num > 999999999) {
+            return { isValid: false, error: '金额超出范围' };
+        }
+        
+        return { isValid: true, error: null };
+    }
+    
+    function validateDate(value) {
+        if (!value) {
+            return { isValid: false, error: '请选择日期' };
+        }
+        
+        var date = new Date(value);
+        if (isNaN(date.getTime())) {
+            return { isValid: false, error: '日期格式无效' };
+        }
+        
+        var today = new Date();
+        today.setHours(23, 59, 59, 999);
+        
+        if (date > today) {
+            return { isValid: false, error: '日期不能超过今天' };
+        }
+        
+        return { isValid: true, error: null };
+    }
+    
+    function validateCategory(value) {
+        if (!value || value.trim() === '') {
+            return { isValid: false, error: '请选择分类' };
+        }
+        return { isValid: true, error: null };
+    }
+    
+    function renderStats(container, stats) {
+        container.innerHTML = 
+            '<div class="stat-card income">' +
+                '<div class="stat-label">总收入</div>' +
+                '<div class="stat-value">¥' + formatMoney(stats.totalIncome) + '</div>' +
+            '</div>' +
+            '<div class="stat-card expense">' +
+                '<div class="stat-label">总支出</div>' +
+                '<div class="stat-value">¥' + formatMoney(stats.totalExpense) + '</div>' +
+            '</div>' +
+            '<div class="stat-card balance">' +
+                '<div class="stat-label">结余</div>' +
+                '<div class="stat-value">¥' + formatMoney(stats.balance) + '</div>' +
+            '</div>';
+    }
+    
+    var currentType = 'expense';
+    
+    function renderForm(container, onSubmit) {
+        container.innerHTML = '<h2>添加记录</h2>';
+        
+        var form = document.createElement('form');
+        form.className = 'record-form';
+        form.innerHTML = 
+            '<div class="form-group">' +
+                '<label>类型</label>' +
+                '<div class="type-toggle">' +
+                    '<button type="button" class="type-btn expense active" data-type="expense">支出</button>' +
+                    '<button type="button" class="type-btn income" data-type="income">收入</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label for="amount">金额</label>' +
+                '<input type="number" id="amount" name="amount" step="0.01" min="0.01" placeholder="请输入金额">' +
+                '<span class="error-message" id="amount-error"></span>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label for="category">分类</label>' +
+                '<select id="category" name="category">' +
+                    '<option value="">请选择分类</option>' +
+                '</select>' +
+                '<span class="error-message" id="category-error"></span>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<label for="date">日期</label>' +
+                '<input type="date" id="date" name="date" value="' + getDateString(new Date()) + '">' +
+                '<span class="error-message" id="date-error"></span>' +
+            '</div>' +
+            '<div class="form-group full-width">' +
+                '<label for="note">备注</label>' +
+                '<textarea id="note" name="note" placeholder="请输入备注（可选）"></textarea>' +
+            '</div>' +
+            '<div class="form-group">' +
+                '<button type="submit" class="btn btn-primary">添加记录</button>' +
+            '</div>';
+        
+        container.appendChild(form);
+        
+        updateCategoryOptions(form, currentType);
+        
+        var typeButtons = form.querySelectorAll('.type-btn');
+        for (var i = 0; i < typeButtons.length; i++) {
+            typeButtons[i].addEventListener('click', function(e) {
+                e.preventDefault();
+                for (var j = 0; j < typeButtons.length; j++) {
+                    typeButtons[j].classList.remove('active');
+                }
+                this.classList.add('active');
+                currentType = this.dataset.type;
+                updateCategoryOptions(form, currentType);
+            });
+        }
+        
+        var amountInput = form.querySelector('#amount');
+        var categorySelect = form.querySelector('#category');
+        var dateInput = form.querySelector('#date');
+        
+        amountInput.addEventListener('blur', function() {
+            var result = validateAmount(amountInput.value);
+            showFieldError(form, 'amount', result.isValid ? null : result.error);
+        });
+        
+        categorySelect.addEventListener('change', function() {
+            var result = validateCategory(categorySelect.value);
+            showFieldError(form, 'category', result.isValid ? null : result.error);
+        });
+        
+        dateInput.addEventListener('change', function() {
+            var result = validateDate(dateInput.value);
+            showFieldError(form, 'date', result.isValid ? null : result.error);
+        });
+        
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            var amountResult = validateAmount(amountInput.value);
+            var categoryResult = validateCategory(categorySelect.value);
+            var dateResult = validateDate(dateInput.value);
+            
+            showFieldError(form, 'amount', amountResult.isValid ? null : amountResult.error);
+            showFieldError(form, 'category', categoryResult.isValid ? null : categoryResult.error);
+            showFieldError(form, 'date', dateResult.isValid ? null : dateResult.error);
+            
+            if (amountResult.isValid && categoryResult.isValid && dateResult.isValid) {
+                var record = {
+                    type: currentType,
+                    amount: yuanToFen(parseFloat(amountInput.value)),
+                    category: categorySelect.value,
+                    date: dateInput.value,
+                    note: form.querySelector('#note').value.trim()
+                };
+                
+                onSubmit(record);
+                resetForm(form);
+            }
+        });
+    }
+    
+    function updateCategoryOptions(form, type) {
+        var select = form.querySelector('#category');
+        var categories = getCategoriesByType(type);
+        
+        var html = '<option value="">请选择分类</option>';
+        for (var i = 0; i < categories.length; i++) {
+            html += '<option value="' + categories[i] + '">' + categories[i] + '</option>';
+        }
+        select.innerHTML = html;
+    }
+    
+    function showFieldError(form, fieldName, error) {
+        var input = form.querySelector('#' + fieldName);
+        var errorSpan = form.querySelector('#' + fieldName + '-error');
+        
+        if (error) {
+            input.classList.add('error');
+            errorSpan.textContent = error;
+        } else {
+            input.classList.remove('error');
+            errorSpan.textContent = '';
+        }
+    }
+    
+    function resetForm(form) {
+        form.reset();
+        form.querySelector('#date').value = getDateString(new Date());
+        
+        var errorMessages = form.querySelectorAll('.error-message');
+        for (var i = 0; i < errorMessages.length; i++) {
+            errorMessages[i].textContent = '';
+        }
+        
+        var errorInputs = form.querySelectorAll('.error');
+        for (var j = 0; j < errorInputs.length; j++) {
+            errorInputs[j].classList.remove('error');
+        }
+        
+        currentType = 'expense';
+        var typeButtons = form.querySelectorAll('.type-btn');
+        for (var k = 0; k < typeButtons.length; k++) {
+            typeButtons[k].classList.toggle('active', typeButtons[k].dataset.type === 'expense');
+        }
+        updateCategoryOptions(form, currentType);
+    }
+    
+    function renderRecords(container, records, onDelete) {
+        container.innerHTML = '';
+        
+        if (records.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>暂无记录</p></div>';
+            return;
+        }
+        
+        var fragment = document.createDocumentFragment();
+        for (var i = 0; i < records.length; i++) {
+            var record = records[i];
+            var item = createRecordItem(record, onDelete);
+            fragment.appendChild(item);
+        }
+        
+        container.appendChild(fragment);
+    }
+    
+    function createRecordItem(record, onDelete) {
+        var item = document.createElement('div');
+        item.className = 'record-item ' + record.type;
+        item.dataset.id = record.id;
+        
+        var icon = record.type === 'income' ? '📈' : '📉';
+        var sign = record.type === 'income' ? '+' : '-';
+        
+        item.innerHTML = 
+            '<div class="record-type-icon ' + record.type + '">' + icon + '</div>' +
+            '<div class="record-info">' +
+                '<span class="record-category">' + record.category + '</span>' +
+                (record.note ? '<span class="record-note">' + record.note + '</span>' : '') +
+            '</div>' +
+            '<span class="record-date">' + record.date + '</span>' +
+            '<span class="record-amount ' + record.type + '">' + sign + '¥' + formatMoney(record.amount) + '</span>' +
+            '<div class="record-actions">' +
+                '<button class="btn-icon delete" title="删除">' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                        '<path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>' +
+                    '</svg>' +
+                '</button>' +
+            '</div>';
+        
+        var deleteBtn = item.querySelector('.delete');
+        deleteBtn.addEventListener('click', function() {
+            if (confirm('确定要删除这条记录吗？')) {
+                onDelete(record.id);
+            }
+        });
+        
+        return item;
+    }
+    
+    function renderFilterBar(container, records, onFilter) {
+        container.innerHTML = '<h2>筛选条件</h2>';
+        
+        var categories = getCategories(records);
+        var categoryOptions = '<option value="all">全部分类</option>';
+        for (var i = 0; i < categories.length; i++) {
+            categoryOptions += '<option value="' + categories[i] + '">' + categories[i] + '</option>';
+        }
+        
+        var filterBar = document.createElement('div');
+        filterBar.className = 'filter-bar';
+        filterBar.innerHTML = 
+            '<div class="filter-group">' +
+                '<label for="filter-type">类型</label>' +
+                '<select id="filter-type" name="type">' +
+                    '<option value="all">全部</option>' +
+                    '<option value="income">收入</option>' +
+                    '<option value="expense">支出</option>' +
+                '</select>' +
+            '</div>' +
+            '<div class="filter-group">' +
+                '<label for="filter-category">分类</label>' +
+                '<select id="filter-category" name="category">' +
+                    categoryOptions +
+                '</select>' +
+            '</div>' +
+            '<div class="filter-group">' +
+                '<label for="filter-start-date">开始日期</label>' +
+                '<input type="date" id="filter-start-date" name="startDate">' +
+            '</div>' +
+            '<div class="filter-group">' +
+                '<label for="filter-end-date">结束日期</label>' +
+                '<input type="date" id="filter-end-date" name="endDate">' +
+            '</div>' +
+            '<div class="filter-group">' +
+                '<div class="filter-actions">' +
+                    '<button type="button" class="btn btn-primary" id="filter-apply">筛选</button>' +
+                    '<button type="button" class="btn btn-secondary" id="filter-reset">重置</button>' +
+                '</div>' +
+            '</div>';
+        
+        container.appendChild(filterBar);
+        
+        var applyBtn = filterBar.querySelector('#filter-apply');
+        var resetBtn = filterBar.querySelector('#filter-reset');
+        var typeSelect = filterBar.querySelector('#filter-type');
+        var categorySelect = filterBar.querySelector('#filter-category');
+        var startDateInput = filterBar.querySelector('#filter-start-date');
+        var endDateInput = filterBar.querySelector('#filter-end-date');
+        
+        applyBtn.addEventListener('click', function() {
+            var filters = {
+                type: typeSelect.value,
+                category: categorySelect.value,
+                startDate: startDateInput.value || null,
+                endDate: endDateInput.value || null
+            };
+            onFilter(filters);
+        });
+        
+        resetBtn.addEventListener('click', function() {
+            typeSelect.value = 'all';
+            categorySelect.value = 'all';
+            startDateInput.value = '';
+            endDateInput.value = '';
+            onFilter({
+                type: 'all',
+                category: 'all',
+                startDate: null,
+                endDate: null
+            });
+        });
+    }
+    
+    var COLORS = {
+        income: '#4caf50',
+        expense: '#f44336',
+        grid: '#e0e0e0',
+        text: '#666666'
+    };
+    
+    function Chart(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.dpr = window.devicePixelRatio || 1;
+        this.width = 0;
+        this.height = 0;
+        this.resize();
+        
+        var self = this;
+        window.addEventListener('resize', function() {
+            self.resize();
+        });
+    }
+    
+    Chart.prototype.resize = function() {
+        var rect = this.canvas.parentElement.getBoundingClientRect();
+        this.canvas.width = rect.width * this.dpr;
+        this.canvas.height = rect.height * this.dpr;
+        this.canvas.style.width = rect.width + 'px';
+        this.canvas.style.height = rect.height + 'px';
+        this.ctx.scale(this.dpr, this.dpr);
+        this.width = rect.width;
+        this.height = rect.height;
+    };
+    
+    Chart.prototype.draw = function(data) {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        
+        var padding = {
+            top: 20,
+            right: 20,
+            bottom: 40,
+            left: 60
+        };
+        
+        var chartWidth = this.width - padding.left - padding.right;
+        var chartHeight = this.height - padding.top - padding.bottom;
+        
+        var maxValue = this.calculateMaxValue(data);
+        var yScale = chartHeight / (maxValue || 1);
+        
+        this.drawGrid(padding, chartWidth, chartHeight, maxValue);
+        this.drawBars(data, padding, chartWidth, chartHeight, yScale, maxValue);
+        this.drawXLabels(data, padding, chartWidth, chartHeight);
+        this.drawLegend();
+    };
+    
+    Chart.prototype.calculateMaxValue = function(data) {
+        var max = 0;
+        for (var i = 0; i < data.length; i++) {
+            max = Math.max(max, data[i].income, data[i].expense);
+        }
+        var yuanMax = fenToYuan(max);
+        return Math.ceil(yuanMax / 100) * 100 || 100;
+    };
+    
+    Chart.prototype.drawGrid = function(padding, chartWidth, chartHeight, maxValue) {
+        var ctx = this.ctx;
+        var gridLines = 5;
+        
+        ctx.strokeStyle = COLORS.grid;
+        ctx.lineWidth = 1;
+        ctx.fillStyle = COLORS.text;
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        
+        for (var i = 0; i <= gridLines; i++) {
+            var y = padding.top + (chartHeight / gridLines) * i;
+            var value = maxValue - (maxValue / gridLines) * i;
+            
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(padding.left + chartWidth, y);
+            ctx.stroke();
+            
+            ctx.fillText(value.toFixed(0), padding.left - 10, y);
+        }
+    };
+    
+    Chart.prototype.drawBars = function(data, padding, chartWidth, chartHeight, yScale, maxValue) {
+        var ctx = this.ctx;
+        var barGroupWidth = chartWidth / data.length;
+        var barWidth = barGroupWidth * 0.3;
+        var barGap = barGroupWidth * 0.1;
+        
+        for (var i = 0; i < data.length; i++) {
+            var item = data[i];
+            var groupX = padding.left + barGroupWidth * i + barGroupWidth / 2;
+            
+            var incomeHeight = fenToYuan(item.income) * yScale;
+            var expenseHeight = fenToYuan(item.expense) * yScale;
+            
+            var incomeY = padding.top + chartHeight - incomeHeight;
+            var expenseY = padding.top + chartHeight - expenseHeight;
+            
+            ctx.fillStyle = COLORS.income;
+            ctx.fillRect(
+                groupX - barWidth - barGap / 2,
+                incomeY,
+                barWidth,
+                incomeHeight
+            );
+            
+            ctx.fillStyle = COLORS.expense;
+            ctx.fillRect(
+                groupX + barGap / 2,
+                expenseY,
+                barWidth,
+                expenseHeight
+            );
+        }
+    };
+    
+    Chart.prototype.drawXLabels = function(data, padding, chartWidth, chartHeight) {
+        var ctx = this.ctx;
+        var barGroupWidth = chartWidth / data.length;
+        
+        ctx.fillStyle = COLORS.text;
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        
+        for (var i = 0; i < data.length; i++) {
+            var x = padding.left + barGroupWidth * i + barGroupWidth / 2;
+            var y = padding.top + chartHeight + 10;
+            
+            ctx.fillText(data[i].label, x, y);
+        }
+    };
+    
+    Chart.prototype.drawLegend = function() {
+        var ctx = this.ctx;
+        
+        var legendY = this.height - 10;
+        var incomeX = this.width / 2 - 60;
+        var expenseX = this.width / 2 + 20;
+        
+        ctx.fillStyle = COLORS.income;
+        ctx.fillRect(incomeX, legendY - 8, 12, 12);
+        ctx.fillStyle = COLORS.text;
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('收入', incomeX + 16, legendY);
+        
+        ctx.fillStyle = COLORS.expense;
+        ctx.fillRect(expenseX, legendY - 8, 12, 12);
+        ctx.fillStyle = COLORS.text;
+        ctx.fillText('支出', expenseX + 16, legendY);
+    };
+    
+    function ExpenseTracker() {
+        this.allRecords = [];
+        this.filteredRecords = [];
+        this.currentFilters = {
+            type: 'all',
+            category: 'all',
+            startDate: null,
+            endDate: null
+        };
+        this.chart = null;
+        
+        this.init();
+    }
+    
+    ExpenseTracker.prototype.init = function() {
+        this.allRecords = initializeData();
+        this.filteredRecords = filterRecords(this.allRecords, this.currentFilters);
+        
+        this.cacheElements();
+        this.initChart();
+        this.render();
+    };
+    
+    ExpenseTracker.prototype.cacheElements = function() {
+        this.statsSection = document.getElementById('stats-section');
+        this.filterSection = document.getElementById('filter-section');
+        this.formSection = document.getElementById('form-section');
+        this.recordsList = document.getElementById('records-list');
+    };
+    
+    ExpenseTracker.prototype.initChart = function() {
+        this.chart = new Chart('trend-chart');
+    };
+    
+    ExpenseTracker.prototype.render = function() {
+        this.renderStats();
+        this.renderFilterBar();
+        this.renderForm();
+        this.renderRecords();
+        this.renderChart();
+    };
+    
+    ExpenseTracker.prototype.renderStats = function() {
+        var stats = calculateStats(this.filteredRecords);
+        renderStats(this.statsSection, stats);
+    };
+    
+    ExpenseTracker.prototype.renderFilterBar = function() {
+        var self = this;
+        renderFilterBar(this.filterSection, this.allRecords, function(filters) {
+            self.currentFilters = filters;
+            self.filteredRecords = filterRecords(self.allRecords, filters);
+            self.renderStats();
+            self.renderRecords();
+        });
+    };
+    
+    ExpenseTracker.prototype.renderForm = function() {
+        var self = this;
+        renderForm(this.formSection, function(record) {
+            addRecord(record);
+            self.allRecords = getRecords();
+            self.filteredRecords = filterRecords(self.allRecords, self.currentFilters);
+            self.renderStats();
+            self.renderRecords();
+            self.renderChart();
+        });
+    };
+    
+    ExpenseTracker.prototype.renderRecords = function() {
+        var self = this;
+        renderRecords(this.recordsList, this.filteredRecords, function(id) {
+            deleteRecordById(id);
+            self.allRecords = getRecords();
+            self.filteredRecords = filterRecords(self.allRecords, self.currentFilters);
+            self.renderStats();
+            self.renderRecords();
+            self.renderChart();
+        });
+    };
+    
+    ExpenseTracker.prototype.renderChart = function() {
+        var last7Days = getLast7Days();
+        var chartData = aggregateByDate(this.allRecords, last7Days);
+        this.chart.draw(chartData);
+    };
+    
+    new ExpenseTracker();
+})();
+    </script>
+</body>
+</html>
